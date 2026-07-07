@@ -21,7 +21,7 @@ def clear_store():
 def test_mcp_inventory():
     tools = mcp_server._tool_manager.list_tools()
     names = [t.name for t in tools]
-    assert len(names) == 4
+    assert len(names) == 6
     assert "msteams_health_check" in names
     assert "msteams_send_notification" in names
     assert "msteams_ask_user" in names
