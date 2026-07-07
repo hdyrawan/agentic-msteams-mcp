@@ -4,20 +4,19 @@ A self-hosted Microsoft Teams MCP server that serves as an agnostic human-in-the
 
 ## Overview
 
-This project implements a dual-surface architecture:
-1. Microsoft Teams bot HTTP endpoint for messages/cards
-2. MCP endpoint for agents
+This project implements a dual-surface architecture to separate real-time bot communication from agent tool capabilities:
+1. **Microsoft Teams Bot HTTP surface**: A secure webhook endpoint (`POST /api/messages`) for receiving and sending messages.
+2. **MCP Server surface**: A standard MCP stdio server that provides tools for agents to interact with Teams.
 
-v0.1.0 provides the core foundation with configuration, health checks, and basic structure.
+v0.2.0 introduces a controlled notification foundation, allowing agents to send targeted notifications through an allowlist-protected gateway.
 
 ## Features
 
-- FastAPI-based HTTP server
-- Configurable via environment variables
-- Structured logging
-- MCP health check tool
-- Docker support
-- Unit tests
+- **Secure Notification Gateway**: Send targets-limited notifications using an allowlist policy.
+- **FastMCP Implementation**: Real MCP stdio protocol for tool execution.
+- **Pydantic Validation**: Strict schema validation for all notification requests.
+- **Audit Logging**: Append-only local audit logs of every delivery attempt.
+- **Configurable and Hardened**: Fail-closed defaults, localhost binding, and environment-driven allowlists.
 
 ## Architecture
 
@@ -53,18 +52,22 @@ pip install -e .
 
 # Copy example environment file
 cp .env.example .env
-
-# Edit .env with your configuration
 ```
 
-### Run the server
+### Run the Server(s)
 
+v0.2.0 splits the surfaces clearly to avoid runtime conflicts.
+
+#### 1. Start the MCP stdio server (for AI Agent use)
+Run via the CLI entrypoint:
 ```bash
-# Start the development server
-uvicorn agentic_msteams_mcp.main:app --reload --host 0.0.0.0 --port 8000
+python -m agentic_msteams_mcp.main --mcp
+```
 
-# Or run via Python module
-python -m agentic_msteams_mcp.main
+#### 2. Start the Teams HTTP surface (//bot webhook)
+Run via uvicorn:
+```bash
+uvicorn agentic_msteams_mcp.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Run tests
@@ -94,29 +97,20 @@ agentic-msteams-mcp/
 │   ├── config.py
 │   ├── mcp_server.py
 │   ├── teams_app.py
-│   └── tools/
-│       ├── __init__.py
-│       └── health.py
-├── tests/
-│   ├── test_config.py
-│   └── test_health.py
+│   ├── audit/
+│   │   └── writer.py
+│   │   ├── notifications/
+│   │   └── policy/
+│   │       └── tools/
+│   │           └── health.py
+│   └── tests/
+│       ├── test_config.py
+│       ├── test_health.py
+│       └── test_notifications.py
 └── docs/
     ├── architecture.md
     ├── security.md
     └── agent-config.md
-```
-
-## Development
-
-Install development dependencies:
-```bash
-pip install -e ".[dev]"
-```
-
-Run linters and type checkers:
-```bash
-flake8 src tests
-mypy src tests
 ```
 
 ## License

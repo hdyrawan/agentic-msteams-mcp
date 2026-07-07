@@ -11,8 +11,9 @@ COPY src/ ./src/
 # Install the package in editable mode
 RUN pip install --no-cache-dir -e .
 
-# Expose ports for both servers
-EXPOSE 8000 8001
+# Expose ports for Teams HTTP surface
+EXPOSE 8000
 
-# Default command to run the application
-CMD ["uvicorn", "agentic_msteams_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command runs the HTTP surface. 
+# To run MCP stdio, override CMD or use a different entrypoint in compose.
+CMD ["python", "-m", "agentic_msteams_mcp.main", "--http"]

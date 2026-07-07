@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 class TargetType(str, Enum):
@@ -22,9 +22,15 @@ class NotificationRequest(BaseModel):
     correlation_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
-    @validator("title", "message")
-    def sanitize_text(cls, v):
-        return v.strip()
+    @field_validator("title", "message", mode="before")
+    @classmethod
+    def strip_and_validate(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("Field cannot be whitespace-only")
+            return stripped
+        return v
 
 class NotificationResult(BaseModel):
     status: str

@@ -9,17 +9,13 @@ teams_app = FastAPI(
     description="HTTP endpoint for Microsoft Teams bot messages"
 )
 
-@teams_app.post("/messages")
+@teams_app.post("/api/messages")
 async def handle_teams_message(request: Request) -> Dict[str, Any]:
     """Handle incoming messages from Microsoft Teams."""
     
-    # Parse incoming message
     try:
         body = await request.json()
-        
-        # Placeholder: actual Microsoft Teams SDK integration would go here
-        # For now, just return a basic acknowledgment
-        
+        # Placeholder for actual Graph API / Teams SDK integration
         return {
             "status": "received",
             "message_id": body.get("id"),
@@ -27,7 +23,6 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
             "type": body.get("type"),
             "recipient": body.get("recipient")
         }
-        
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error processing message: {str(e)}")
 

@@ -9,79 +9,60 @@ The agentic-msteams-mcp server implements a secure gateway architecture that mai
 ## Configuration Security
 
 ### Environment Variables
-- All configuration is loaded from environment variables only
-- No secrets are stored in the repository
-- `.env.example` provides a template for configuration
-- Production instances must set all required environment variables
+- All configuration is loaded from environment variables only via Pydantic Settings.
+- No secrets are stored in the repository.
+- `.env.example` provides a template for configuration.
 
-### Required Configuration
-The following environment variables are mandatory for production use:
+### Mandatory Production Config
+The server will fail closed if these are not provided in production:
 - `TEAMS_APP_ID`: Microsoft Teams application identifier
 - `TEAMS_APP_PASSWORD`: Microsoft Teams application password
 
-The server will fail closed if these are not provided.
-
 ## Attack Surface Reduction
 
-### Minimal Tool Inventory
-- Only essential tools are implemented in v0.1.0
-- No broad Microsoft Graph read/write capabilities
-- No arbitrary command execution
-- Limited to communication and health check capabilities
+### Minimal Tool Inventory (v0.2.0)
+To prevent agent privilege escalation, the MCP server exposes exactly two tools:
+1. `msteams_health_check`: Basic system diagnostic.
+2. `msteams_send_notification`: Controlled notification delivery.
+
+**Strict Constraints:**
+- No broad Microsoft Graph read/write capabilities.
+- No arbitrary command execution or VQL.
+- No tool for listing users or channels.
+
+### Notification Hardening
+Notifications are protected by:
+- **Allowlist Policy**: Only targets explicitly configured in `MSTEAMS_ALLOWED_USER_IDS` and `MSTEAMS_ALLOWED_CHANNEL_IDS` can receive notifications.
+- **Strict Validation**: Pydantic models enforce maximum lengths for titles and messages to prevent buffer/rendering attacks.
+- **Fail Closed**: Any target not found in the allowlist is rejected immediately.
 
 ### Binding Security
-- By default, the server binds to localhost only
-- Explicit configuration required for external access  
-- Network access restricted to configured hosts/ports
+- By default, the server binds to `127.0.0.1` (localhost).
+- Explicit configuration required for external access.
 
-### No Persistent Storage
-- No database or persistent storage of messages
-- All processing is ephemeral
-- No credential caching or persistent tokens
+## Audit and Compliance
 
-## Authorization Model
+### Append-Only Logging
+Every notification attempt—whether successful or denied—is recorded in a local audit log (`MSTEAMS_AUDIT_LOG_PATH`).
+Audit records include:
+- Timestamp, tool name, target metadata, decision (ALLOWED/DENIED), and reason.
+- A stable SHA-256 fingerprint of the request for deduplication.
 
-The current implementation:
-1. Does not implement approval workflows 
-2. Does not include complex authorization checks
-3. Assumes appropriate access control at the Teams bot level
-
-Future versions will expand upon these security measures with:
-- Approval workflow implementations
-- Enhanced role-based access controls
-- Token management capabilities  
+**Privacy Constraint:** The full message body is intentionally omitted from audit logs to prevent sensitive data leaks.
 
 ## Network Security
 
 ### Default Configuration
-- Binds to localhost only by default (127.0.0.1)
-- Ports configurable through environment variables  
-- No automatic exposure of endpoints
+- Binds to localhost only by default.
+- Ports are configurable through environment variables.
 
 ### HTTPS Support
-- No built-in HTTPS support in v0.1.0
-- HTTPS should be handled at a reverse proxy level in production deployments
+- No built-in HTTPS support; it should be handled at a reverse proxy level (e.g., Nginx, Traefik) in production.
 
 ## Threat Model Considerations
 
-### Internal Threats
-The server does not process sensitive information beyond basic bot metadata, so threat impact is limited.
-
 ### External Threats  
-- The main attack surface is the HTTP interfaces
-- Protection relies on proper configuration and network segmentation
-- No authentication required at the MCP level in v0.1.0 (to be expanded)
-
-### Future Security Enhancements
-
-Future development will include:
-- Authentication/authorization headers for MCP endpoints
-- Token-based authentication for Teams bot communication  
-- Encrypted message handling capabilities
-- More granular permissions models
-
-## Compliance Considerations
-
-This implementation currently provides basic security controls suitable for:
-- Development and testing environments  
-- Controlled internal deployments where appropriate access controls are enforced
+The primary attack surface is the HTTP interface and the MCP stdio channel. Protection relies on:
+1. Proper configuration of allowlists.
+2. Network segmentation.
+3. Using a secure MCP client that only provides authorized tools to the agent.

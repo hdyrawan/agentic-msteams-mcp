@@ -2,33 +2,50 @@
 
 import asyncio
 import sys
-
+import argparse
 import uvicorn
 
-from . import app
 from .mcp_server import mcp_server
+from .teams_app import teams_app
 
+def run_mcp_stdio():
+    """Run the MCP stdio server."""
+    # FastMCP's run() is a blocking call for stdio
+    mcp_server.run()
 
-def main():  # noqa: A01
-    """Start both the Teams HTTP surface and the MCP stdio server."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+def run_http_surface():
+    """Run the Teams HTTP surface via uvicorn."""
+    uvicorn.run(
+        teams_app,
+        host="0.0.0.0", # Usually defined by config but set here for simplicity in CLI
+        port=8000,
+        log_level="info",
+    )
 
-    # Start MCP stdio in background
-    mcp_task = loop.create_task(mcp_server.run_stdio_async())
+def main():
+    """Split entrypoint for MCP and HTTP surfaces."""
+    parser = argparse.ArgumentParser(description="Agentic MS Teams MCP Server")
+    parser.add_argument(
+        "--mcp", 
+        action="store_true", 
+        help="Run as an MCP stdio server"
+    )
+    parser.add_argument(
+        "--http", 
+        action="store_true", 
+        help="Run as the Teams HTTP surface"
+    )
+    
+    args = parser.parse_args()
 
-    # Run uvicorn for Teams (main thread blocks here)
-    try:
-        uvicorn.run(
-            app,
-            host="127.0.0.1",  # localhost bind by default
-            port=8000,
-            log_level="info",
-        )
-    except KeyboardInterrupt:  # noqa: E722
-        mcp_task.cancel()
-        loop.run_until_complete(mcp_task)
-
+    if args.mcp:
+        run_mcp_stdio()
+    elif args.http:
+        run_http_surface()
+    else:
+        # Default behavior if no flag is provided: provide help
+        parser.print_help()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
