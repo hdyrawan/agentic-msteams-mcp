@@ -3,7 +3,7 @@ from typing import Any, Dict
 # Import the real business logic
 from .tools.health import msteams_health_check as _real_health_check 
 from .notifications.models import NotificationRequest, NotificationResult, TargetType
-from .notifications.service import DryRunNotificationSender, NotificationSender
+from .notifications.service import DryRunNotificationSender, RealGraphNotificationSender, NotificationSender
 from .policy.allowlist import is_target_allowed
 from .audit.writer import write_audit_log
 from .config import settings
@@ -16,7 +16,7 @@ from .asks.models import AskState
 def get_notification_sender() -> NotificationSender:
     if settings.msteams_notification_dry_run:
         return DryRunNotificationSender()
-    return DryRunNotificationSender()
+    return RealGraphNotificationSender()
 
 async def msteams_send_notification(
     target_type: str, 
@@ -85,7 +85,6 @@ async def msteams_ask_user(
             expires_in_seconds=expires_in_seconds
         )
     except Exception as e:
-        # Placeholder for audit logic
         placeholder = UserAskRequest.model_construct(target_user_id=target_user_id, question="VALIDATION_FAIL")
         res_status = "error"
         reason = f"Validation failed: {str(e)}"
@@ -95,7 +94,6 @@ async def msteams_ask_user(
     if not is_target_allowed(TargetType.USER, req.target_user_id):
         res_status = "denied"
         reason = "User not in allowlist"
-        # Use the validated request for fingerprinting
         audit_id = write_audit_log(req, {"status": res_status, "reason": reason}, event_type="ask_creation")
         return {"status": "denied", "reason": reason, "audit_id": audit_id}
 
@@ -122,7 +120,12 @@ async def msteams_get_user_reply(request_id: str) -> Dict[str, Any]:
     try:
         req = UserReplyRequest(request_id=request_id)
     except Exception as e:
-        return {"status": "error", "reason": f"Validation failed: {str(e)}"}
+        # Now audited!
+        placeholder = UserReplyRequest.model_construct(request_id=request_id)
+        res_status = "error"
+        reason = f"Validation failed: {str(e)}"
+        audit_id = write_audit_log(placeholder, {"status": res_status, "reason": reason}, event_type="reply_lookup")
+        return {"status": "error", "reason": reason, "audit_id": audit_id}
 
     state, reply_text = await ask_service.get_reply_status(req.request_id)
     

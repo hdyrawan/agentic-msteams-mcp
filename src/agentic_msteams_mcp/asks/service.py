@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from .models import UserAsk, AskState
 from .store import store
 
@@ -16,7 +16,7 @@ class AskService:
         expires_in_seconds: int = 3600
     ) -> UserAsk:
         request_id = str(uuid.uuid4())
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         
         ask = UserAsk(
             request_id=request_id,
@@ -36,7 +36,8 @@ class AskService:
         if not ask:
             return AskState.NOT_FOUND, None
         
-        if ask.is_expired():
+        # Check expiration using timezone-aware now()
+        if datetime.now(timezone.utc) > ask.expires_at:
             ask.state = AskState.EXPIRED
             await store.save(ask)
             return AskState.EXPIRED, None
@@ -44,9 +45,16 @@ class AskService:
         return ask.state, ask.reply_text
 
     async def set_reply(self, request_id: str, text: str) -> Optional[UserAsk]:
-        ask = await store.update_state(request_id, AskState.ANSWERED, reply=text)
-        if ask:
-            ask.reply_received_at = datetime.now()
+        now = datetime.now(timezone.utc)
+        ask = await store.get(request_id)
+        if not ask:
+            return None
+            
+        ask.state = AskState.ANSWERED
+        ask.reply_text = text
+        ask.reply_received_at = now
+        
+        await store.save(ask)
         return ask
 
 service = AskService()

@@ -34,9 +34,13 @@ def write_audit_log(request: Any, result: Any, event_type: str = "notification")
     '''Write an append-only audit log of a request/result pair.'''
     fingerprint = generate_stable_fingerprint(request)
     
-    # Normalize results to extract status/reason
-    status = getattr(result, "status", str(result))
-    reason = getattr(result, "reason", "")
+    # Normalize results to extract status/reason accurately for both objects and dicts
+    if isinstance(result, dict):
+        status = result.get("status", "unknown")
+        reason = result.get("reason", "")
+    else:
+        status = getattr(result, "status", "unknown")
+        reason = getattr(result, "reason", "")
     
     audit_entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

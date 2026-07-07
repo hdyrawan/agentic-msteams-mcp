@@ -81,7 +81,7 @@ def test_get_reply_unknown():
 
 def test_ask_expired():
     # Use an already allowed user to ensure we get a request_id
-    # Min valid expires_in_seconds is 60’
+    # Min valid expires_in_seconds is 60
     ask_res = run_async(msteams_ask_user("test-user", "Hello?", expires_in_seconds=60))
     assert ask_res["status"] == "success"
     rid = ask_res["request_id"]
@@ -90,7 +90,7 @@ def test_ask_expired():
     from agentic_msteams_mcp.asks.store import store as s
     user_ask = s._asks[rid]
     import datetime
-    user_ask.expires_at = datetime.datetime.now() - datetime.timedelta(seconds=1)
+    user_ask.expires_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1)
     
     reply_res = run_async(msteams_get_user_reply(rid))
     assert reply_res["state"] == "expired"
