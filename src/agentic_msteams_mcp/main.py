@@ -7,6 +7,7 @@ import uvicorn
 
 from .mcp_server import mcp_server
 from .teams_app import teams_app
+from .config import settings
 
 def run_mcp_stdio():
     """Run the MCP stdio server."""
@@ -17,8 +18,8 @@ def run_http_surface():
     """Run the Teams HTTP surface via uvicorn."""
     uvicorn.run(
         teams_app,
-        host="0.0.0.0", # Usually defined by config but set here for simplicity in CLI
-        port=8000,
+        host=settings.server_host,
+        port=settings.server_port,
         log_level="info",
     )
 

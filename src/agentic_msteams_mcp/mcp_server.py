@@ -3,7 +3,7 @@ from typing import Any, Dict
 # Import the real business logic
 from .tools.health import msteams_health_check as _real_health_check 
 from .notifications.models import NotificationRequest, NotificationResult, TargetType
-from .notifications.service import DryRunNotificationSender, NotificationSender
+from .notifications.service import DryRunNotificationSender, RealGraphNotificationSender, NotificationSender
 from .policy.allowlist import is_target_allowed
 from .audit.writer import write_audit_log
 from .config import settings
@@ -11,7 +11,7 @@ from .config import settings
 def get_notification_sender() -> NotificationSender:
     if settings.msteams_notification_dry_run:
         return DryRunNotificationSender()
-    return DryRunNotificationSender()
+    return RealGraphNotificationSender()
 
 async def msteams_send_notification(
     target_type: str, 

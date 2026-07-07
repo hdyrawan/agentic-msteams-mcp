@@ -11,7 +11,7 @@ class NotificationSender(ABC):
         pass
 
 class DryRunNotificationSender(NotificationSender):
-    '''Safe placeholder sender for v0.2.0 development.'''
+    '''Safe placeholder sender for development. Always succeeds.'''
     
     async def send(self, request: NotificationRequest) -> NotificationResult:
         return NotificationResult(
@@ -22,4 +22,17 @@ class DryRunNotificationSender(NotificationSender):
             delivered=True,
             dry_run=True,
             reason="Dry-run delivery successful"
+        )
+
+class RealGraphNotificationSender(NotificationSender):
+    '''Placeholder for actual Microsoft Graph API implementation.'''
+    async def send(self, request: NotificationRequest) -> NotificationResult:
+        # This will be implemented in v0.3.0+
+        return NotificationResult(
+            status="error",
+            target_type=request.target_type,
+            target_id=request.target_id,
+            delivered=False,
+            dry_run=False,
+            reason="Real delivery not yet implemented in v0.2.x"
         )
