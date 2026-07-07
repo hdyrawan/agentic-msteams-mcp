@@ -12,6 +12,8 @@ from .config import settings
 from .asks.service import service as ask_service
 from .asks.validation import UserAskRequest, UserReplyRequest
 from .asks.models import AskState
+from .approvals.service import service as approval_service
+from .approvals.validation import UserApprovalRequest
 
 def get_notification_sender() -> NotificationSender:
     if settings.msteams_notification_dry_run:
@@ -140,7 +142,87 @@ async def msteams_get_user_reply(request_id: str) -> Dict[str, Any]:
         "audit_id": audit_id
     }
 
+async def msteams_request_approval(
+    target_user_id: str, 
+    title: str, 
+    description: str, 
+    risk_level: str = None,
+    action_fingerprint: str = None,
+    correlation_id: str = None,
+    metadata: dict = None,
+    expires_in_seconds: int = 3600
+) -> Dict[str, Any]:
+    '''Request human approval for an action via an allowlisted Teams user.'''
+    try:
+        req = UserApprovalRequest(
+            target_user_id=target_user_id,
+            title=title,
+            description=description,
+            risk_level=risk_level,
+            action_fingerprint=action_fingerprint,
+            correlation_id=correlation_id,
+            metadata=metadata,
+            expires_in_seconds=expires_in_seconds
+        )
+    except Exception as e:
+        # Audit validation failure
+        placeholder = UserApprovalRequest.model_construct(target_user_id=target_user_id, title="VALIDATION_FAIL")
+        res_status = "error"
+        reason = f"Validation failed: {str(e)}"
+        audit_id = write_audit_log(placeholder, {"status": res_status, "reason": reason}, event_type="approval_request")
+        return {"status": "error", "reason": reason, "audit_id": audit_id}
+
+    if not is_target_allowed(TargetType.USER, req.target_user_id):
+        res_status = "denied"
+        reason = "User not in allowlist"
+        audit_id = write_audit_log(req, {"status": res_status, "reason": reason}, event_type="approval_request")
+        return {"status": "denied", "reason": reason, "audit_id": audit_id}
+
+    approval = await approval_service.create_approval(
+        target_user_id=req.target_user_id,
+        title=req.title,
+        description=req.description,
+        risk_level=req.risk_level,
+        action_fingerprint=req.action_fingerprint,
+        correlation_id=req.correlation_id,
+        metadata=req.metadata,
+        expires_in_seconds=req.expires_in_seconds
+    )
+    audit_id = write_audit_log(approval, {"status": "success", "reason": "Approval created"}, event_type="approval_request")
+    return {
+        "status": "success",
+        "approval_id": approval.approval_id,
+        "state": approval.state,
+        "expires_at": approval.expires_at.isoformat(),
+        "dry_run": settings.msteams_notification_dry_run,
+        "audit_id": audit_id
+    }
+
+async def msteams_get_approval(approval_id: str) -> Dict[str, Any]:
+    '''Check the current state of a requested approval.'''
+    try:
+        # Simple validation for request ID
+        if not approval_id or not approval_id.strip():
+            raise ValueError("Approval ID cannot be empty")
+    except Exception as e:
+        placeholder = {"approval_id": approval_id}
+        res_status = "error"
+        reason = f"Validation failed: {str(e)}"
+        audit_id = write_audit_log(placeholder, {"status": res_status, "reason": reason}, event_type="approval_lookup")
+        return {"status": "error", "reason": reason, "audit_id": audit_id}
+
+    state, reason = await approval_service.get_approval_status(approval_id)
+    audit_id = write_audit_log({"approval_id": approval_id}, {"status": state, "reason": f"Approval check: {state}"}, event_type="approval_lookup")
+    return {
+        "status": "success",
+        "approval_id": approval_id,
+        "state": state,
+        "reason": reason,
+        "audit_id": audit_id
+    }
+
 from mcp.server.fastmcp import FastMCP as _FastMCP
+
 
 def _register_tools(mcp: _FastMCP) -> None:
     @mcp.tool(name="msteams_health_check", description="Check Microsoft Teams server health")
@@ -158,6 +240,14 @@ def _register_tools(mcp: _FastMCP) -> None:
     @mcp.tool(name="msteams_get_user_reply", description="Check the state of a requested user reply")
     async def _get_reply(request_id: str) -> Dict[str, Any]:
         return await msteams_get_user_reply(request_id)
+
+    @mcp.tool(name="msteams_request_approval", description="Request human approval for an action via an allowlisted Teams user")
+    async def _request_approval(target_user_id: str, title: str, description: str, risk_level: str = None, action_fingerprint: str = None, correlation_id: str = None, metadata: dict = None, expires_in_seconds: int = 3600) -> Dict[str, Any]:
+        return await msteams_request_approval(target_user_id, title, description, risk_level, action_fingerprint, correlation_id, metadata, expires_in_seconds)
+
+    @mcp.tool(name="msteams_get_approval", description="Check the current state of a requested approval")
+    async def _get_approval(approval_id: str) -> Dict[str, Any]:
+        return await msteams_get_approval(approval_id)
 
 mcp_server = _FastMCP(name="agentic-msteams-mcp", host="127.0.0.1", port=8000)
 _register_tools(mcp_server)
