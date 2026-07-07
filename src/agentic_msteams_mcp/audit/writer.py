@@ -19,7 +19,7 @@ def generate_stable_fingerprint(obj: Any) -> str:
             if isinstance(v, datetime):
                 data[k] = v.isoformat()
         # Filter out body fields to avoid sensitive logging
-        for field in ["message", "question", "reply_text"]:
+        for field in ["message", "question", "reply_text", "description"]:
             data.pop(field, None)
         canonical_json = json.dumps(data, sort_keys=True)
     elif isinstance(obj, dict):

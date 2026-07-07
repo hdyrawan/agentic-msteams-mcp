@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-__version__: str = "0.3.0"
+__version__: str = "0.4.0"
 
 # The app is now consolidated in teams_app.py to avoid duplication and confusion.
 # We import it here to maintain the entrypoint used by uvicorn if necessary,
