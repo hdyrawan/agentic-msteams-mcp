@@ -1,0 +1,124 @@
+# agentic-msteams-mcp
+
+A self-hosted Microsoft Teams MCP server that serves as an agnostic human-in-the-loop gateway for AI agents.
+
+## Overview
+
+This project implements a dual-surface architecture:
+1. Microsoft Teams bot HTTP endpoint for messages/cards
+2. MCP endpoint for agents
+
+v0.1.0 provides the core foundation with configuration, health checks, and basic structure.
+
+## Features
+
+- FastAPI-based HTTP server
+- Configurable via environment variables
+- Structured logging
+- MCP health check tool
+- Docker support
+- Unit tests
+
+## Architecture
+
+See `docs/architecture.md` for detailed architecture information.
+
+## Security
+
+See `docs/security.md` for security considerations.
+
+## Configuration
+
+Configuration is handled via environment variables. See `.env.example` for available options.
+
+## Running Locally
+
+### Prerequisites
+
+- Python 3.11+
+- Docker (optional, for building the image)
+
+### Setup
+
+```bash
+# Clone or create the project directory
+cd agentic-msteams-mcp
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
+
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env with your configuration
+```
+
+### Run the server
+
+```bash
+# Start the development server
+uvicorn agentic_msteams_mcp.main:app --reload --host 0.0.0.0 --port 8000
+
+# Or run via Python module
+python -m agentic_msteams_mcp.main
+```
+
+### Run tests
+
+```bash
+pytest
+```
+
+### Build Docker image
+
+```bash
+docker build -t agentic-msteams-mcp:dev .
+```
+
+## Project Structure
+
+```
+agentic-msteams-mcp/
+├── pyproject.toml
+├── README.md
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── src/agentic_msteams_mcp/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── mcp_server.py
+│   ├── teams_app.py
+│   └── tools/
+│       ├── __init__.py
+│       └── health.py
+├── tests/
+│   ├── test_config.py
+│   └── test_health.py
+└── docs/
+    ├── architecture.md
+    ├── security.md
+    └── agent-config.md
+```
+
+## Development
+
+Install development dependencies:
+```bash
+pip install -e ".[dev]"
+```
+
+Run linters and type checkers:
+```bash
+flake8 src tests
+mypy src tests
+```
+
+## License
+
+MIT License

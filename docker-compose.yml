@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  agentic-msteams-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      - TEAMS_APP_ID=${TEAMS_APP_ID}
+      - TEAMS_APP_PASSWORD=${TEAMS_APP_PASSWORD}
+      - SERVER_HOST=${SERVER_HOST}
+      - SERVER_PORT=${SERVER_PORT}
+      - MCP_SERVER_HOST=${MCP_SERVER_HOST}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT}
+    volumes:
+      - ./.env:/app/.env
+    restart: unless-stopped
