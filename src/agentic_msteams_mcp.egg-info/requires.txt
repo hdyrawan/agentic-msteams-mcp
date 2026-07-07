@@ -1,0 +1,16 @@
+fastapi<1.0.0,>=0.104.0
+uvicorn<1.0.0,>=0.24.0
+python-dotenv>=1.0.0
+mcp>=0.1.0
+msal>=1.23.0
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6
+structlog>=24.0.0
+
+[dev]
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0

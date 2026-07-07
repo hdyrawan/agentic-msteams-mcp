@@ -1,19 +1,24 @@
-"""Configuration management for agentic-msteams-mcp."""
-
+from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 
 class Settings(BaseSettings):
     # Microsoft Teams Configuration (optional for testing/dev)
     teams_app_id: str = ""
     teams_app_password: str = ""
     
+    # Notification Control
+    msteams_notification_dry_run: bool = True
+    msteams_allowed_user_ids: List[str] = Field(default_factory=list)
+    msteams_allowed_channel_ids: List[str] = Field(default_factory=list)
+    msteams_audit_log_path: str = "data/notifications_audit.log"
+    
     # Server Configuration
-    server_host: str = "localhost"
+    server_host: str = "127.0.0.1"
     server_port: int = 8000
     
     # MCP Configuration  
-    mcp_server_host: str = "localhost"
+    mcp_server_host: str = "127.0.0.1"
     mcp_server_port: int = 8001
     
     # Logging Configuration
@@ -22,9 +27,11 @@ class Settings(BaseSettings):
     # Development Flags
     debug: bool = False
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
 
 # Global settings instance
 settings = Settings()

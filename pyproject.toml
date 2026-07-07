@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentic-msteams-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agentic Microsoft Teams MCP Server for AI Agent Gateway"
 authors = [
     {name = "Hartdy Vistahart", email = "harddy.vista@gmail.com"}
