@@ -4,65 +4,41 @@ This document outlines the security model and considerations for agentic-msteams
 
 ## Overview
 
-The agentic-msteams-mcp server implements a secure gateway architecture that maintains separation between Microsoft Teams bot functionality and MCP agent capabilities. 
+The agentic-msteams-mcp server implements a secure gateway architecture that maintains strict isolation between AI agents and the Microsoft Teams environment.
 
-## Configuration Security
+## Core Security Principles
 
-### Environment Variables
-- All configuration is loaded from environment variables only via Pydantic Settings.
-- No secrets are stored in the repository.
-- `.env.example` provides a template for configuration.
+### 1. Closed-World Toolset
+To prevent "prompt injection" or agent hallucinations from causing unauthorized actions, the server exposes only four high-level tools:
+- `msteams_health_check`
+- `msteams_send_notification`
+- `msteams_ask_user` (v0.3.0+)
+- `msteams_get_user_reply` (v0.3.0+)
 
-### Mandatory Production Config
-The server will fail closed if these are not provided in production:
-- `TEAMS_APP_ID`: Microsoft Teams application identifier
-- `TEAMS_APP_PASSWORD`: Microsoft Teams application password
+No arbitrary Graph API or Teams read/write tools are exposed.
 
-## Attack Surface Reduction
+### 2. Fail-Closed Allowlist Policy
+The server employs a strict allowlist for all outbound communication. 
+- **Enforcement**: Before any attempt to send a notification or ask a question, the target ID is checked against `MSTEAMS_ALLOWED_USER_IDS` and `MSTEAMS_ALLOWED_CHANNEL_IDS`.
+- **Failure Mode**: If an ID is not explicitly allowlisted, the request is rejected with a `denied` status. An empty allowlist results in all requests being denied.
 
-### Minimal Tool Inventory (v0.2.0)
-To prevent agent privilege escalation, the MCP server exposes exactly two tools:
-1. `msteams_health_check`: Basic system diagnostic.
-2. `msteams_send_notification`: Controlled notification delivery.
+### 3. Privacy-Preserving Audit Logging
+Every interaction attempt is recorded in an append-only audit log (`MSTEAMS_AUDIT_LOG_PATH`).
+- **No Secrets**: Log entries never contain message bodies, question text, reply content, or authentication secrets.
+- **Stable Identity**: Uses deterministic SHA-256 fingerprints of request metadata (target, severity, etc.) to allow auditors to track requests without seeing the sensitive payload.
 
-**Strict Constraints:**
-- No broad Microsoft Graph read/write capabilities.
-- No arbitrary command execution or VQL.
-- No tool for listing users or channels.
+### 4. Dry-Run Default
+The server defaults to `MSTEAMS_NOTIFICATION_DRY_RUN=True`. This ensures that fresh deployments do not accidentally trigger notifications until explicitly configured for production delivery.
 
-### Notification Hardening
-Notifications are protected by:
-- **Allowlist Policy**: Only targets explicitly configured in `MSTEAMS_ALLOWED_USER_IDS` and `MSTEAMS_ALLOWED_CHANNEL_IDS` can receive notifications.
-- **Strict Validation**: Pydantic models enforce maximum lengths for titles and messages to prevent buffer/rendering attacks.
-- **Fail Closed**: Any target not found in the allowlist is rejected immediately.
+## Threat Model Analysis
 
-### Binding Security
-- By default, the server binds to `127.0.0.1` (localhost).
-- Explicit configuration required for external access.
+| Threat | Mitigation |
+| --- | --- |
+| **Unauthorized Target** | Fail-closed allowlist blocks delivery to unknown users. |
+| **Sensitive Data Leak in Logs** | Body-stripping fingerprinting ensures payload privacy in audit logs. |
+| **Agent Hallucination (Tool Use)** | Closed toolset prevents agents from attempting arbitrary Graph API calls. |
+| **Unauthenticated Webhook Injection** | The HTTP surface is intended to be hosted behind a proxy that validates Teams signatures (future hardening). |
 
-## Audit and Compliance
-
-### Append-Only Logging
-Every notification attempt—whether successful or denied—is recorded in a local audit log (`MSTEAMS_AUDIT_LOG_PATH`).
-Audit records include:
-- Timestamp, tool name, target metadata, decision (ALLOWED/DENIED), and reason.
-- A stable SHA-256 fingerprint of the request for deduplication.
-
-**Privacy Constraint:** The full message body is intentionally omitted from audit logs to prevent sensitive data leaks.
-
-## Network Security
-
-### Default Configuration
-- Binds to localhost only by default.
-- Ports are configurable through environment variables.
-
-### HTTPS Support
-- No built-in HTTPS support; it should be handled at a reverse proxy level (e.g., Nginx, Traefik) in production.
-
-## Threat Model Considerations
-
-### External Threats  
-The primary attack surface is the HTTP interface and the MCP stdio channel. Protection relies on:
-1. Proper configuration of allowlists.
-2. Network segmentation.
-3. Using a secure MCP client that only provides authorized tools to the agent.
+## Constraints
+- No tenant user search tools are provided.
+- No approval workflow logic exists in the server; it only provides primitives for ask/reply.

@@ -4,45 +4,46 @@ This document describes how to configure and use agents with the agentic-msteams
 
 ## Overview
 
-The MCP endpoint in agentic-msteams-mcp provides a structured interface for AI agents to communicate with Microsoft Teams through the server's gateway.
+The MCP endpoint in agentic-msteams-mcp provides a structured interface for AI agents to communicate with humans via Microsoft Teams while maintaining strict security boundaries.
 
-## Configuration Parameters
+## Available Tools (v0.3.0)
 
-Agent configuration is handled via environment variables. The following parameters are relevant:
+### 1. `msteams_health_check`
+Verifies that the server is running and its basic dependencies are available.
+- **Response**: `{status: "ok", ...}`
 
-### Basic Server Configuration  
-- `SERVER_HOST`: Hostname for the main HTTP endpoint (default: 127.0.0.1)
-- `SERVER_PORT`: Port number for the main HTTP endpoint (default: 8000)
+### 2. `msteams_send_notification`
+Sends a one-way alert to an allowlisted user or channel.
+- **Inputs**: `target_type`, `target_id`, `title`, `message`, `severity`.
+- **Security**: Fails closed if target is not in the allowlist.
 
-### Notification Control
-- `MSTEAMS_NOTIFICATION_DRY_RUN`: Boolean flag. If true, notifications are simulated and not sent to Graph API. Default: `True`.
-- `MSTEAMS_ALLOWED_USER_IDS`: Comma-separated list of allowed Microsoft Teams User IDs.
-- `MSTEAMS_ALLOWED_CHANNEL_IDS`: Comma-separated list of allowed Microsoft Teams Channel IDs.
-- `MSTEAMS_AUDIT_LOG_PATH`: Absolute path to the audit log file (default: `data/notifications_audit.log`).
+### 3. `msteams_ask_user` (v0.3.0+)
+Poses a structured question to an allowlisted user and tracks it asynchronously.
+- **Inputs**: `target_user_id`, `question`, `expires_in_seconds`.
+- **Behavior**: Returns a `request_id`. The agent must later poll for the reply.
 
-### Teams Configuration
-- `TEAMS_APP_ID`: Microsoft Teams application identifier
-- `TEAMS_APP_PASSWORD`: Microsoft Teams application password
+### 4. `msteams_get_user_reply` (v0.3.0+)
+Checks the current state of a specific ask request.
+- **Inputs**: `request_id`.
+- **Possible States**:
+    - `pending`: No reply yet.
+    - `answered`: User has responded. (Includes binary response text).
+    - `expired`: Requesttimed out based on `expires_in_seconds`.
+    - `not_found`: Invalid or unknown request ID.
 
-## Agent Tool Usage
+## Configuration for Agents
 
-The MCP server provides exactly two tools that agents can invoke:
+Agents should be instructed to:
+1. **Check Health**: Start by calling `msteams_health_check` to ensure the gateway is available.
+2. **Use Notifications for Alerts**: Use `msteams_send_notification` for one-way status updates.
+3. **Ask then Poll**: When a human response is needed:
+    - Call `msteams_ask_user`.
+    - Record the `request_id`.
+    - Periodically call `msteams_get_user_reply(request_id)` until the state becomes `answered` or `expired`.
 
-### `msteams_health_check`
-Returns basic system health information for the Teams server.
-
-### `msteams_send_notification`
-Sends a notification to an allowlisted target. 
-**Constraint**: The agent must provide a valid `target_type`, `target_id`, `title`, `message`, and `severity`. If the `target_id` is not in the configured allowlist, the tool will return a `denied` status.
-
-## Integration Patterns
-
-### MCP Connection (Stdio)
-Agents should connect to this server via stdio transport. 
-Example CLI start: `python -m agentic_msteams_mcp.main --mcp`
-
-### Teams Message Flow
-Messages from Microsoft Teams pass through the HTTP surface:
-1. Teams sends messages to `POST /api/messages`.
-2. Server forwards relevant information to connected MCP agents (via separate orchestration).
-3. Agents respond via the MCP protocol tools.
+## Security Constraints for Agents
+Agents cannot:
+- Search for users in the tenant.
+- Read arbitrary Teams messages or channel history.
+- Modify user settings or permissions.
+- Bypass the allowlist by guessing IDs.

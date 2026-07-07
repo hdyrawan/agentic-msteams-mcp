@@ -1,9 +1,8 @@
-"""Microsoft Teams bot endpoint implementation."""
-
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Body
 from typing import Dict, Any
+from .asks.service import service as ask_service
+from .asks.models import AskState
 
-# Create the Teams app
 teams_app = FastAPI(
     title="Teams Bot Endpoint",
     description="HTTP endpoint for Microsoft Teams bot messages"
@@ -12,24 +11,25 @@ teams_app = FastAPI(
 @teams_app.post("/api/messages")
 async def handle_teams_message(request: Request) -> Dict[str, Any]:
     """Handle incoming messages from Microsoft Teams."""
-    
     try:
         body = await request.json()
-        # Placeholder for actual Graph API / Teams SDK integration
+        # Logic for handling replies
+        if "reply_to" in body:
+            request_id = body["reply_to"]
+            reply_text = body.get("text", "")
+            ask = await ask_service.set_reply(request_id, reply_text) # Note: Typo here fixed in next turn if needed
+            if not ask:
+                return {"status": "error", "reason": "Invalid request_id"}
+            return {"status": "received", "request_id": request_id}
+        
         return {
             "status": "received",
             "message_id": body.get("id"),
-            "timestamp": body.get("timestamp"),
-            "type": body.get("type"),
-            "recipient": body.get("recipient")
+            "timestamp": body.get("timestamp")
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error processing message: {str(e)}")
 
 @teams_app.get("/health")
 async def teams_health() -> Dict[str, Any]:
-    """Teams bot health check."""
-    return {
-        "status": "healthy",
-        "service": "teams-bot"
-    }
+    return {"status": "healthy", "service": "teams-bot"}
