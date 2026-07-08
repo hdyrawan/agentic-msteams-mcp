@@ -19,7 +19,7 @@ def generate_stable_fingerprint(obj: Any) -> str:
             if isinstance(v, datetime):
                 data[k] = v.isoformat()
         # Filter out body fields to avoid sensitive logging
-        for field in ["message", "question", "reply_text", "description"]:
+        for field in ["message", "question", "reply_text", "description", "reason", "text"]:
             data.pop(field, None)
         canonical_json = json.dumps(data, sort_keys=True)
     elif isinstance(obj, dict):
@@ -42,10 +42,17 @@ def write_audit_log(request: Any, result: Any, event_type: str = "notification")
         status = getattr(result, "status", "unknown")
         reason = getattr(result, "reason", "")
     
+    # Extract target ID from request (works for Pydantic models or dicts)
+    target_id = "UNKNOWN"
+    if isinstance(request, dict):
+        target_id = request.get("target_user_id") or request.get("approval_id") or request.get("reply_to", "UNKNOWN")
+    else:
+        target_id = getattr(request, "target_id", getattr(request, "target_user_id", "UNKNOWN"))
+
     audit_entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "event": event_type,
-        "target_id": getattr(request, "target_id", getattr(request, "target_user_id", "UNKNOWN")),
+        "target_id": target_id,
         "decision": "ALLOWED" if (hasattr(result, "delivered") and result.delivered) or status == "success" else "DENIED",
         "reason": reason,
         "fingerprint": fingerprint,

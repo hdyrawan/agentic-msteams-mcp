@@ -26,7 +26,7 @@ The server employs a strict allowlist for all outbound communication.
 
 ### 3. Privacy-Preserving Audit Logging
 Every interaction attempt is recorded in an append-only audit log (`MSTEAMS_AUDIT_LOG_PATH`).
-- **No Secrets**: Log entries never contain message bodies, question text, reply content, or authentication secrets.
+- **No Secrets**: Log entries never contain message bodies, question text, reply content, approval reasons, or authentication secrets.
 - **Stable Identity**: Uses deterministic SHA-256 fingerprints of request metadata (target, severity, etc.) to allow auditors to track requests without seeing the sensitive payload.
 
 ### 4. Dry-Run Default

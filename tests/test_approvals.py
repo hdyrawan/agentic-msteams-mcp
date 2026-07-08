@@ -70,9 +70,25 @@ def test_approval_audit_no_body():
     secret_desc = "SECRET_APPROVAL_BODY_12345"
     run_async(msteams_request_approval("test-user", "Title", secret_desc))
 
+    # Test callback audit no body
+    req = run_async(msteams_request_approval("test-user", "Title", "Desc"))
+    aid = req["approval_id"]
+    payload = {
+        "approval_id": aid,
+        "decision": "approved",
+        "sender_user_id": "test-user",
+        "reason": "SECRET_REASON_12345"
+    }
+    client.post(
+        "/api/messages",
+        headers={"X-MSTEAMS-MCP-SECRET": "test-secure-secret"},
+        json=payload
+    )
+
     with open(settings.msteams_audit_log_path, "r") as f:
         logs = f.read()
         assert secret_desc not in logs
+        assert "SECRET_REASON_12345" not in logs
 
 # --- INBOUND CALLBACK TESTS ---
 
@@ -231,7 +247,7 @@ def test_callback_duplicate_decision():
     assert res.json()["status"] == "error"
 
 def test_callback_expired_approval():
-    """Expired approval fails."""
+    """Expired approval fails and is audited."""
     req = run_async(msteams_request_approval("test-user", "Title", "Desc"))
     aid = req["approval_id"]
 
@@ -252,3 +268,13 @@ def test_callback_expired_approval():
     )
     assert res.status_code == 200
     assert res.json()["status"] == "error"
+
+    # Verify state persisted as expired
+    state_res = run_async(msteams_get_approval(aid))
+    assert state_res["state"] == "expired"
+
+    # Verify audit entry exists
+    with open(settings.msteams_audit_log_path, "r") as f:
+        logs = f.read()
+        assert "approval_callback" in logs
+        assert aid in logs

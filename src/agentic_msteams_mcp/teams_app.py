@@ -5,6 +5,7 @@ from .asks.models import AskState
 from .security import validate_inbound_secret
 from .approvals.service import service as approval_service
 from .approvals.models import ApprovalState
+from .audit.writer import write_audit_log
 
 teams_app = FastAPI(
     title="Teams Bot Endpoint",
@@ -31,10 +32,14 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
             reason = body.get("reason")
 
             if not all([approval_id, decision, sender_user_id]):
-                return {"status": "error", "reason": "Missing required parameters: approval_id, decision, and sender_user_id are required"}
+                res = {"status": "error", "reason": "Missing required parameters: approval_id, decision, and sender_user_id are required"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             if decision not in ["approved", "rejected"]:
-                return {"status": "error", "reason": "Invalid decision value. Must be 'approved' or 'rejected'"}
+                res = {"status": "error", "reason": "Invalid decision value. Must be 'approved' or 'rejected'"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             # Map string decision to ApprovalState enum
             target_state = ApprovalState.APPROVED if decision == "approved" else ApprovalState.REJECTED
@@ -43,27 +48,41 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
             from .approvals.store import store as app_store
             approval = await app_store.get(approval_id)
             if not approval:
-                return {"status": "error", "reason": f"Unknown approval ID: {approval_id}"}
+                res = {"status": "error", "reason": f"Unknown approval ID: {approval_id}"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             if approval.target_user_id != sender_user_id:
-                return {"status": "error", "reason": "Sender user ID does not match the approved target user"}
+                res = {"status": "error", "reason": "Sender user ID does not match the approved target user"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             if approval.is_expired():
-                return {"status": "error", "reason": "Approval has expired"}
+                # Persist EXPIRED state before returning error
+                await app_store.update_state(approval_id, ApprovalState.EXPIRED)
+                res = {"status": "error", "reason": "Approval has expired"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             if approval.state != ApprovalState.PENDING:
-                return {"status": "error", "reason": f"Approval is already in state: {approval.state}"}
+                res = {"status": "error", "reason": f"Approval is already in state: {approval.state}"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
             # Record the decision
             result = await approval_service.set_decision(approval_id, target_state, reason)
             if not result:
-                return {"status": "error", "reason": "Failed to record approval decision"}
+                res = {"status": "error", "reason": "Failed to record approval decision"}
+                write_audit_log(body, res, event_type="approval_callback")
+                return res
 
-            return {
+            res = {
                 "status": "received",
                 "approval_id": approval_id,
                 "decision": decision
             }
+            write_audit_log(body, res, event_type="approval_callback")
+            return res
 
         # Logic for handling replies
         if "reply_to" in body:
@@ -74,10 +93,12 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
             requester_agent_id = body.get("requester_agent_id")
 
             if not all([target_user_id, tool_name, requester_agent_id]):
-                return {
+                res = {
                     "status": "error",
                     "reason": "Missing security parameters: target_user_id, tool_name, or requester_agent_id are required for replies"
                 }
+                write_audit_log(body, res, event_type="reply_callback")
+                return res
 
             ask = await ask_service.set_reply(
                 request_id=request_id,
@@ -87,8 +108,13 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
                 requester_agent_id=requester_agent_id
             )
             if not ask:
-                return {"status": "error", "reason": "Invalid request_id or authorization failure"}
-            return {"status": "received", "request_id": request_id}
+                res = {"status": "error", "reason": "Invalid request_id or authorization failure"}
+                write_audit_log(body, res, event_type="reply_callback")
+                return res
+
+            res = {"status": "received", "request_id": request_id}
+            write_audit_log(body, res, event_type="reply_callback")
+            return res
 
         return {
             "status": "received",
