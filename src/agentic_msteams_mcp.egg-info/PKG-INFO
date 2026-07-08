@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: agentic-msteams-mcp
-Version: 0.1.0
+Version: 0.4.0
 Summary: Agentic Microsoft Teams MCP Server for AI Agent Gateway
 Author-email: Hartdy Vistahart <harddy.vista@gmail.com>
 License: MIT
@@ -31,121 +31,76 @@ A self-hosted Microsoft Teams MCP server that serves as an agnostic human-in-the
 
 ## Overview
 
-This project implements a dual-surface architecture:
-1. Microsoft Teams bot HTTP endpoint for messages/cards
-2. MCP endpoint for agents
+This project implements a dual-surface architecture to allow AI agents to interact with humans via Microsoft Teams without requiring the agent to have direct Graph API access or complex bot logic.
 
-v0.1.0 provides the core foundation with configuration, health checks, and basic structure.
+### v0.4.0 Feature: Human-in-the-Loop & Approvals
+v0.4.0 provides a comprehensive suite of tools for agents to interact with humans via Microsoft Teams, including notifications, asynchronous questions, and formal approval workflows.
 
-## Features
+- **`msteams_send_notification`**: Sends one-way alerts.
+- **`msteams_ask_user`**: Poses structured questions; returns `request_id`.
+- **`msteams_get_user_reply`**: Tracks responses to asks.
+- **`msteams_request_approval`**: Requests a formal binary decision (Approve/Reject).
+- **`msteams_get_approval`**: Checks the state of an approval request.
 
-- FastAPI-based HTTP server
-- Configurable via environment variables
-- Structured logging
-- MCP health check tool
-- Docker support
-- Unit tests
+## Core Architecture
 
-## Architecture
+### 1. The MCP Surface (Stdio)
+The primary interface for AI agents. It exposes a strictly limited toolset of six tools:
+- `msteams_health_check`: Verifies server connectivity.
+- `msteams_send_notification`: Sends one-way alerts to allowlisted users/channels.
+- `msteams_ask_user`: Requests information from an allowlisted user.
+- `msteams_get_user_reply`: Checks the state of a requested reply.
+- `msteams_request_approval`: Initiates a formal approval request.
+- `msteams_get_approval`: Retrieves the decision for an approval request.
 
-See `docs/architecture.md` for detailed architecture information.
+### 2. The Teams Surface (HTTP)
+A lightweight FastAPI app that acts as the webhook receiver for Microsoft Teams. It is designed to be hosted behind a proxy/gateway.
 
-## Security
+## Security Model (Secure-by-Design)
 
-See `docs/security.md` for security considerations.
+### Closed-World Toolset
+The server explicitly denies any arbitrary Graph API operations. All interactions are gated through specific, high-level tools.
 
-## Configuration
+### Fail-Closed Allowlist
+Notifications and Asks are only delivered to IDs defined in the `MSTEAMS_ALLOWED_USER_IDS` or `MSTEAMS_ALLOWED_CHANNEL_IDS` environment variables. If an ID is not listed, the request is rejected immediately.
 
-Configuration is handled via environment variables. See `.env.example` for available options.
+### Audit Logging
+Every attempt to notify or ask a user is logged to a local audit file (`MSTEAMS_AUDIT_LOG_PATH`). 
+- **Privacy**: Log entries contain metadata and fingerprints but NEVER include the actual message or question body.
+- **Stability**: Uses SHA-256 deterministic fingerprinting for audit evidence.
 
-## Running Locally
+### Dry-Run Mode
+By default, `MSTEAMS_NOTIFICATION_DRY_RUN=True`. In this mode, the server validates all requests and logs them to audit but does not actually call the Microsoft Graph API. NOTE: Real Teams/Graph delivery is currently not implemented; dry-run is the intended safe default for current versions.
 
-### Prerequisites
+## Installation & Configuration
 
-- Python 3.11+
-- Docker (optional, for building the image)
+### Environment Variables
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SERVER_HOST` | `127.0.0.1` | Bind address for the HTTP surface. |
+| `SERVER_PORT` | `8000` | Port for the HTTP surface. |
+| `MSTEAMS_ALLOWED_USER_IDS` | `""` | Comma-separated list of allowlisted User IDs (Required). |
+| `MSTEAMS_ALLOWED_CHANNEL_IDS` | `""` | Comma-separated list of allowlisted Channel IDs. |
+| `MSTEAMS_NOTIFICATION_DRY_RUN` | `True` | If true, no real Graph API calls are made. |
+| `MSTEAMS_AUDIT_LOG_PATH` | `data/audit.log` | Path to the append-only audit log file. |
 
-### Setup
+### Running the Server
+The server provides two distinct modes:
 
+**1. MCP Stdio Mode (for AI Agents)**
 ```bash
-# Clone or create the project directory
-cd agentic-msteams-mcp
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -e .
-
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env with your configuration
+python -m agentic_msteams_mcp.main --mcp
 ```
 
-### Run the server
-
+**2. HTTP Surface Mode (for Teams Webhooks)**
 ```bash
-# Start the development server
-uvicorn agentic_msteams_mcp.main:app --reload --host 0.0.0.0 --port 8000
-
-# Or run via Python module
-python -m agentic_msteams_mcp.main
+python -m agentic_msteams_mcp.main --http
 ```
 
-### Run tests
+## Deployment
 
+The server is provided as a Docker image for consistent runtime environments.
 ```bash
-pytest
+docker build -t agentic-msteams-mcp .
+docker run -p 8000:8000 -e MSTEAMS_ALLOWED_USER_IDS="user1,user2" agentic-msteams-mcp --http
 ```
-
-### Build Docker image
-
-```bash
-docker build -t agentic-msteams-mcp:dev .
-```
-
-## Project Structure
-
-```
-agentic-msteams-mcp/
-├── pyproject.toml
-├── README.md
-├── .env.example
-├── Dockerfile
-├── docker-compose.yml
-├── src/agentic_msteams_mcp/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── config.py
-│   ├── mcp_server.py
-│   ├── teams_app.py
-│   └── tools/
-│       ├── __init__.py
-│       └── health.py
-├── tests/
-│   ├── test_config.py
-│   └── test_health.py
-└── docs/
-    ├── architecture.md
-    ├── security.md
-    └── agent-config.md
-```
-
-## Development
-
-Install development dependencies:
-```bash
-pip install -e ".[dev]"
-```
-
-Run linters and type checkers:
-```bash
-flake8 src tests
-mypy src tests
-```
-
-## License
-
-MIT License
