@@ -11,7 +11,7 @@ def test_settings_loaded():
 
 def test_default_values():
     """Test default configuration values."""
-    assert settings.server_host == "localhost"
+    assert settings.server_host == "127.0.0.1"
     assert settings.server_port == 8000
-    assert settings.mcp_server_host == "localhost"
+    assert settings.mcp_server_host == "127.0.0.1"
     assert settings.mcp_server_port == 8001

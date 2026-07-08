@@ -6,20 +6,25 @@ A self-hosted Microsoft Teams MCP server that serves as an agnostic human-in-the
 
 This project implements a dual-surface architecture to allow AI agents to interact with humans via Microsoft Teams without requiring the agent to have direct Graph API access or complex bot logic.
 
-### v0.3.0 Feature: Ask/Reply Workflow
-v0.3.0 introduces the ability for agents to pose structured questions to users and track responses asynchronously.
+### v0.4.0 Feature: Human-in-the-Loop & Approvals
+v0.4.0 provides a comprehensive suite of tools for agents to interact with humans via Microsoft Teams, including notifications, asynchronous questions, and formal approval workflows.
 
-- **`msteams_ask_user`**: Poses a question to an allowlisted user. Returns a `request_id`.
-- **`msteams_get_user_reply`**: Checks if a user has replied to a specific request.
+- **`msteams_send_notification`**: Sends one-way alerts.
+- **`msteams_ask_user`**: Poses structured questions; returns `request_id`.
+- **`msteams_get_user_reply`**: Tracks responses to asks.
+- **`msteams_request_approval`**: Requests a formal binary decision (Approve/Reject).
+- **`msteams_get_approval`**: Checks the state of an approval request.
 
 ## Core Architecture
 
 ### 1. The MCP Surface (Stdio)
-The primary interface for AI agents. It exposes a strictly limited toolset:
+The primary interface for AI agents. It exposes a strictly limited toolset of six tools:
 - `msteams_health_check`: Verifies server connectivity.
 - `msteams_send_notification`: Sends one-way alerts to allowlisted users/channels.
-- `msteams_ask_user`: Requests information from an allowlisted user (v0.3.0+).
-- `msteams_get_user_reply`: Checks the state of a requested reply (v0.3.0+).
+- `msteams_ask_user`: Requests information from an allowlisted user.
+- `msteams_get_user_reply`: Checks the state of a requested reply.
+- `msteams_request_approval`: Initiates a formal approval request.
+- `msteams_get_approval`: Retrieves the decision for an approval request.
 
 ### 2. The Teams Surface (HTTP)
 A lightweight FastAPI app that acts as the webhook receiver for Microsoft Teams. It is designed to be hosted behind a proxy/gateway.
@@ -38,7 +43,7 @@ Every attempt to notify or ask a user is logged to a local audit file (`MSTEAMS_
 - **Stability**: Uses SHA-256 deterministic fingerprinting for audit evidence.
 
 ### Dry-Run Mode
-By default, `MSTEAMS_NOTIFICATION_DRY_RUN=True`. In this mode, the server validates all requests and logs them to audit but does not actually call the Microsoft Graph API.
+By default, `MSTEAMS_NOTIFICATION_DRY_RUN=True`. In this mode, the server validates all requests and logs them to audit but does not actually call the Microsoft Graph API. NOTE: Real Teams/Graph delivery is currently not implemented; dry-run is the intended safe default for current versions.
 
 ## Installation & Configuration
 

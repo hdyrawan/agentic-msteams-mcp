@@ -58,9 +58,8 @@ The implementation follows security best practices:
 
 ## Future Development Plans
 
-1. Implement actual Microsoft Teams SDK integration
-2. Add approval workflow capabilities (v0.2.0)
-3. Extend with Velo/MISP-specific logic (v0.3.0+)
-4. Add broader Microsoft Graph support (v0.4.0+) 
+1. Implement actual Microsoft Teams SDK integration and Graph API delivery (Current versions utilize Dry-Run as the safe default).
+2. Expand allowlist capabilities to support group-based permissions.
+3. Integrate with enterprise identity providers for dynamic user discovery.
 
-The current v0.1.0 implementation focuses on proving the architecture and establishing a secure communication channel between human-in-the-loop agents and Microsoft Teams.
+The current v0.4.0 implementation provides the full set of MCP tools for notifications, asks, and approvals, while maintaining a secure dry-run delivery model by default to prevent accidental production triggers.

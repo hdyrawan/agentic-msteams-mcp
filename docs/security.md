@@ -9,11 +9,13 @@ The agentic-msteams-mcp server implements a secure gateway architecture that mai
 ## Core Security Principles
 
 ### 1. Closed-World Toolset
-To prevent "prompt injection" or agent hallucinations from causing unauthorized actions, the server exposes only four high-level tools:
+To prevent "prompt injection" or agent hallucinations from causing unauthorized actions, the server exposes only six high-level tools:
 - `msteams_health_check`
 - `msteams_send_notification`
-- `msteams_ask_user` (v0.3.0+)
-- `msteams_get_user_reply` (v0.3.0+)
+- `msteams_ask_user`
+- `msteams_get_user_reply`
+- `msteams_request_approval`
+- `msteams_get_approval`
 
 No arbitrary Graph API or Teams read/write tools are exposed.
 
@@ -41,4 +43,3 @@ The server defaults to `MSTEAMS_NOTIFICATION_DRY_RUN=True`. This ensures that fr
 
 ## Constraints
 - No tenant user search tools are provided.
-- No approval workflow logic exists in the server; it only provides primitives for ask/reply.

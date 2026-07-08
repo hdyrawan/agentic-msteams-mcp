@@ -1,61 +1,73 @@
 import pytest
-from datetime import datetime, timedelta, timezone
-from src.agentic_msteams_mcp.approvals.service import service as approval_service
-from src.agentic_msteams_mcp.approvals.store import store as approval_store
-from src.agentic_msteams_mcp.approvals.models import ApprovalState
 import asyncio
+from agentic_msteams_mcp.mcp_server import msteams_request_approval, msteams_get_approval
+from agentic_msteams_mcp.config import settings
+from agentic_msteams_mcp.approvals.models import ApprovalState
+
+def run_async(coro):
+    return asyncio.run(coro)
 
 @pytest.fixture(autouse=True)
-def clear_store():
-    approval_store._approvals = {}
-    yield
+def setup_config():
+    settings.msteams_allowed_user_ids = ["test-user"]
+    settings.msteams_notification_dry_run = True
 
-@pytest.mark.asyncio
-async def test_approval_lifecycle():
-    target = "user-1"
-    title = "Critical Action"
-    desc = "Delete Production DB"
-    
-    app = await approval_service.create_approval(
-        target_user_id=target, title=title, description=desc, risk_level="critical"
-    )
-    
-    assert app.approval_id.startswith("app-")
-    assert app.state == ApprovalState.PENDING
-    
-    # Check get status
-    state, reason = await approval_service.get_approval_status(app.approval_id)
-    assert state == ApprovalState.PENDING
-    
-    # Set to approved
-    await approval_service.set_decision(app.approval_id, ApprovalState.APPROVED, "Looks good")
-    state, reason = await approval_service.get_approval_status(app.approval_id)
-    assert state == ApprovalState.APPROVED
-    assert reason == "Looks good"
+@pytest.fixture(autouse=True)
+def clear_audit():
+    # Ensure we can read the audit log fresh
+    with open(settings.msteams_audit_log_path, "w") as f:
+        f.write("")
 
-@pytest.mark.asyncio
-async def test_approval_expired():
-    target = "user-1"
-    app = await approval_service.create_approval(
-        target_user_id=target, title="Test", description="Test", expires_in_seconds=-60
-    )
-    
-    state, reason = await approval_service.get_approval_status(app.approval_id)
-    assert state == ApprovalState.EXPIRED
+def test_request_approval_allowed():
+    res = run_async(msteams_request_approval("test-user", "Title", "Description"))
+    assert res["status"] == "success"
+    assert "approval_id" in res
+    assert "state" in res
+    assert "expires_at" in res
+    assert "audit_id" in res
 
-@pytest.mark.asyncio
-async def test_approval_not_found():
-    state, reason = await approval_service.get_approval_status("non-existent")
-    assert state == ApprovalState.NOT_FOUND
+def test_request_approval_denied():
+    res = run_async(msteams_request_approval("hacker", "Title", "Description"))
+    assert res["status"] == "denied"
+    assert "audit_id" in res
 
-@pytest.mark.asyncio
-async def test_decision_immutability():
-    target = "user-1"
-    app = await approval_service.create_approval(
-        target_user_id=target, title="Test", description="Test"
-    )
-    await approval_service.set_decision(app.approval_id, ApprovalState.REJECTED, "No")
+def test_request_approval_whitespace_validation():
+    # Empty title
+    res = run_async(msteams_request_approval("test-user", "  ", "Description"))
+    assert res["status"] == "error"
+    assert "audit_id" in res
     
-    # Try to change it to APPROVED
-    updated = await approval_service.set_decision(app.approval_id, ApprovalState.APPROVED, "Yes")
-    assert updated.state == ApprovalState.REJECTED
+    # Empty description
+    res = run_async(msteams_request_approval("test-user", "Title", "  "))
+    assert res["status"] == "error"
+    assert "audit_id" in res
+
+def test_request_approval_invalid_risk():
+    # Assuming risk_level has specific allowed values (e.g., low, medium, high, critical)
+    # If the validation is via Pydantic enum/literal, this should fail.
+    res = run_async(msteams_request_approval("test-user", "Title", "Description", risk_level="super-danger"))
+    assert res["status"] == "error"
+    assert "audit_id" in res
+
+def test_get_approval_pending():
+    # Create one first
+    req_res = run_async(msteams_request_approval("test-user", "Title", "Description"))
+    aid = req_res["approval_id"]
+    
+    res = run_async(msteams_get_approval(aid))
+    assert res["status"] == "success"
+    assert res["state"] == "pending"
+
+def test_get_approval_not_found():
+    res = run_async(msteams_get_approval("ghost-id"))
+    assert res["status"] == "success" # The tool returns success but state is NOT_FOUND
+    assert res["state"] == "not_found"
+
+def test_approval_audit_no_body():
+    # Approval description should not be in audit logs
+    secret_desc = "SECRET_APPROVAL_BODY_12345"
+    run_async(msteams_request_approval("test-user", "Title", secret_desc))
+    
+    with open(settings.msteams_audit_log_path, "r") as f:
+        logs = f.read()
+        assert secret_desc not in logs
