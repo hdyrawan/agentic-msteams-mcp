@@ -29,7 +29,12 @@ Every interaction attempt is recorded in an append-only audit log (`MSTEAMS_AUDI
 - **No Secrets**: Log entries never contain message bodies, question text, reply content, approval reasons, or authentication secrets.
 - **Stable Identity**: Uses deterministic SHA-256 fingerprints of request metadata (target, severity, etc.) to allow auditors to track requests without seeing the sensitive payload.
 
-### 4. Dry-Run Default
+### 4. State Persistence and Privacy
+To ensure system reliability across restarts, optional durable state configuration is provided (`msteams_use_durable_state`).
+- **Default**: Durable state is disabled by default (in-memory storage).
+- **Privacy Boundary**: Audit logs remain separate from the state store. Sensitive message bodies, questions, and approval descriptions must not be persisted unless explicitly designed and reviewed for compliance in a later version.
+
+### 5. Dry-Run Default
 The server defaults to `MSTEAMS_NOTIFICATION_DRY_RUN=True`. This ensures that fresh deployments do not accidentally trigger notifications until explicitly configured for production delivery.
 
 ## Threat Model Analysis

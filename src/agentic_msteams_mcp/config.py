@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     msteams_allowed_user_ids: List[str] = Field(default_factory=list)
     msteams_allowed_channel_ids: List[str] = Field(default_factory=list)
     msteams_audit_log_path: str = "data/notifications_audit.log"
+
+    # Durable State Configuration (v0.5.0a)
+    msteams_use_durable_state: bool = False
+    msteams_state_store_path: str = "data/state.json"
     
     # Server Configuration
     server_host: str = "127.0.0.1"
