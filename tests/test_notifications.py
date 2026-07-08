@@ -128,10 +128,33 @@ def test_audit_no_bodies():
     )
 
     import os
+    import json
     with open(settings.msteams_audit_log_path, "r") as f:
         logs = f.read()
         assert "Secret Question?" not in logs
         assert "SECRET_REPLY_TEXT_12345" not in logs
+
+    # Verify that different texts produce the same fingerprint for the same request
+    payload2 = {
+        "reply_to": rid,
+        "text": "DIFFERENT_REPLY_TEXT_67890",
+        "target_user_id": "test-user",
+        "tool_name": "msteams_ask_user",
+        "requester_agent_id": "unknown"
+    }
+    client.post(
+        "/api/messages",
+        headers={"X-MSTEAMS-MCP-SECRET": settings.msteams_inbound_shared_secret},
+        json=payload2
+    )
+
+    with open(settings.msteams_audit_log_path, "r") as f:
+        lines = f.readlines()
+        log1 = json.loads(lines[-2])
+        log2 = json.loads(lines[-1])
+        assert log1["fingerprint"] == log2["fingerprint"], "Fingerprints should be identical when only text differs"
+        assert log1["decision"] == "ALLOWED", "Reply callback audit decision should be ALLOWED"
+        assert log2["decision"] == "ALLOWED", "Reply callback audit decision should be ALLOWED"
 
 def test_teams_app_reply_success():
     # 1. Create an ask

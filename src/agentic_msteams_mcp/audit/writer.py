@@ -12,6 +12,9 @@ logger = logging.getLogger("msteams-audit")
 
 def generate_stable_fingerprint(obj: Any) -> str:
     '''Generate a stable SHA-256 fingerprint of an object (excludes bodies).'''
+    # Fields that must not affect the audit fingerprint
+    forbidden = ["message", "question", "reply_text", "description", "reason", "text", "raw_body", "body"]
+
     if hasattr(obj, "model_dump"): # Pydantic model
         data = obj.model_dump()
         # Convert datetimes to ISO strings for JSON serialization
@@ -19,12 +22,13 @@ def generate_stable_fingerprint(obj: Any) -> str:
             if isinstance(v, datetime):
                 data[k] = v.isoformat()
         # Filter out body fields to avoid sensitive logging
-        for field in ["message", "question", "reply_text", "description", "reason", "text"]:
+        for field in forbidden:
             data.pop(field, None)
         canonical_json = json.dumps(data, sort_keys=True)
     elif isinstance(obj, dict):
-        # If it's already a filtered dict
-        canonical_json = json.dumps(obj, sort_keys=True)
+        # Create a filtered copy to avoid mutating the original input
+        filtered_data = {k: v for k, v in obj.items() if k not in forbidden}
+        canonical_json = json.dumps(filtered_data, sort_keys=True)
     else:
         canonical_json = json.dumps({"raw": str(obj)}, sort_keys=True)
         
@@ -42,6 +46,13 @@ def write_audit_log(request: Any, result: Any, event_type: str = "notification")
         status = getattr(result, "status", "unknown")
         reason = getattr(result, "reason", "")
     
+    # Decision logic for audit log
+    allowed_statuses = {"success", "received", "accepted"}
+    denied_statuses = {"denied", "error", "rejected"}
+    
+    is_allowed = (hasattr(result, "delivered") and result.delivered) or status in allowed_statuses
+    decision = "ALLOWED" if is_allowed else "DENIED"
+
     # Extract target ID from request (works for Pydantic models or dicts)
     target_id = "UNKNOWN"
     if isinstance(request, dict):
@@ -53,7 +64,7 @@ def write_audit_log(request: Any, result: Any, event_type: str = "notification")
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "event": event_type,
         "target_id": target_id,
-        "decision": "ALLOWED" if (hasattr(result, "delivered") and result.delivered) or status == "success" else "DENIED",
+        "decision": decision,
         "reason": reason,
         "fingerprint": fingerprint,
         "status": status

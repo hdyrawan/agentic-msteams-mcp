@@ -125,6 +125,13 @@ def test_callback_approved_success():
     assert res.status_code == 200
     assert res.json() == {"status": "received", "approval_id": aid, "decision": "approved"}
 
+    # Verify audit decision is ALLOWED (since status is 'received')
+    import json
+    with open(settings.msteams_audit_log_path, "r") as f:
+        last_log = json.loads(f.readlines()[-1])
+        assert last_log["decision"] == "ALLOWED"
+        assert last_log["status"] == "received"
+
     # Verify state check via MCP tool
     status = run_async(msteams_get_approval(aid))
     assert status["state"] == "approved"
@@ -147,6 +154,13 @@ def test_callback_rejected_success():
     )
     assert res.status_code == 200
     assert res.json() == {"status": "received", "approval_id": aid, "decision": "rejected"}
+
+    # Verify audit decision is ALLOWED (since status is 'received')
+    import json
+    with open(settings.msteams_audit_log_path, "r") as f:
+        last_log = json.loads(f.readlines()[-1])
+        assert last_log["decision"] == "ALLOWED"
+        assert last_log["status"] == "received"
 
     # Verify state check via MCP tool
     status = run_async(msteams_get_approval(aid))
@@ -273,8 +287,11 @@ def test_callback_expired_approval():
     state_res = run_async(msteams_get_approval(aid))
     assert state_res["state"] == "expired"
 
-    # Verify audit entry exists
+    # Verify audit entry exists and decision is DENIED (since status is 'error')
+    import json
     with open(settings.msteams_audit_log_path, "r") as f:
-        logs = f.read()
-        assert "approval_callback" in logs
-        assert aid in logs
+        last_log = json.loads(f.readlines()[-1])
+        assert "approval_callback" in last_log["event"]
+        assert aid in last_log["target_id"]
+        assert last_log["decision"] == "DENIED"
+        assert last_log["status"] == "error"
