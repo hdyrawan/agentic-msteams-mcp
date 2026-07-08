@@ -290,8 +290,9 @@ def test_callback_expired_approval():
     # Verify audit entry exists and decision is DENIED (since status is 'error')
     import json
     with open(settings.msteams_audit_log_path, "r") as f:
-        last_log = json.loads(f.readlines()[-1])
-        assert "approval_callback" in last_log["event"]
-        assert aid in last_log["target_id"]
-        assert last_log["decision"] == "DENIED"
-        assert last_log["status"] == "error"
+        logs = [json.loads(line) for line in f if line.strip()]
+        callback_logs = [l for l in logs if "approval_callback" in l["event"]]
+        last_cb = callback_logs[-1]
+        assert aid in last_cb["target_id"]
+        assert last_cb["decision"] == "DENIED"
+        assert last_cb["status"] == "error"
