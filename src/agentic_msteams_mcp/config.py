@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings
 from typing import Optional, List
 
 class Settings(BaseSettings):
+    # Inbound Callback Authentication
+    msteams_inbound_shared_secret: str = ""
+    msteams_require_inbound_auth: bool = True
+    
     # Microsoft Teams Configuration (optional for testing/dev)
     teams_app_id: str = ""
     teams_app_password: str = ""

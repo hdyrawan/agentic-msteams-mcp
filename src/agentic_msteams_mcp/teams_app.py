@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, HTTPException, Body
 from typing import Dict, Any
 from .asks.service import service as ask_service
 from .asks.models import AskState
+from .security import validate_inbound_secret
 
 teams_app = FastAPI(
     title="Teams Bot Endpoint",
@@ -11,6 +12,12 @@ teams_app = FastAPI(
 @teams_app.post("/api/messages")
 async def handle_teams_message(request: Request) -> Dict[str, Any]:
     """Handle incoming messages from Microsoft Teams."""
+    # 1. Inbound Secret Validation
+    provided_secret = request.headers.get("X-MSTEAMS-MCP-SECRET")
+    is_valid, auth_msg = validate_inbound_secret(provided_secret)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail=auth_msg)
+
     try:
         body = await request.json()
         # Logic for handling replies
