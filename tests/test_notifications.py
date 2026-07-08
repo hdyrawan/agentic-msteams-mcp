@@ -112,11 +112,26 @@ def test_audit_no_bodies():
     # Valid ask should not log the question in audit (based on generate_stable_fingerprint)
     ask_res = run_async(msteams_ask_user("test-user", "Secret Question?"))
     rid = ask_res["request_id"]
-    
+
+    # Test reply callback audit no body
+    payload = {
+        "reply_to": rid,
+        "text": "SECRET_REPLY_TEXT_12345",
+        "target_user_id": "test-user",
+        "tool_name": "msteams_ask_user",
+        "requester_agent_id": "unknown"
+    }
+    client.post(
+        "/api/messages",
+        headers={"X-MSTEAMS-MCP-SECRET": settings.msteams_inbound_shared_secret},
+        json=payload
+    )
+
     import os
     with open(settings.msteams_audit_log_path, "r") as f:
         logs = f.read()
         assert "Secret Question?" not in logs
+        assert "SECRET_REPLY_TEXT_12345" not in logs
 
 def test_teams_app_reply_success():
     # 1. Create an ask
