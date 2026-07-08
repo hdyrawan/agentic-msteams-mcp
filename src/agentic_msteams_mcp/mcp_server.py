@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Import the real business logic
 from .tools.health import msteams_health_check as _real_health_check 
@@ -71,13 +71,20 @@ async def msteams_send_notification(
     return res.model_dump() | {"audit_id": audit_id}
 
 async def msteams_ask_user(
-    target_user_id: str, 
-    question: str, 
-    correlation_id: str = None, 
-    metadata: dict = None, 
-    expires_in_seconds: int = 3600
+    target_user_id: str,
+    question: str,
+    correlation_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    expires_in_seconds: int = 3600,
+    tool_name: str = "msteams_ask_user",
+    requester_agent_id: str = "unknown"
 ) -> Dict[str, Any]:
-    '''Ask a controlled question to an allowlisted Microsoft Teams user.'''
+    """
+    Ask a controlled question to an allowlisted Microsoft Teams user.
+
+    The request_id returned is bound to target_user_id, tool_name, and requester_agent_id
+    for security and authorization purposes.
+    """
     try:
         req = UserAskRequest(
             target_user_id=target_user_id,
@@ -87,7 +94,10 @@ async def msteams_ask_user(
             expires_in_seconds=expires_in_seconds
         )
     except Exception as e:
-        placeholder = UserAskRequest.model_construct(target_user_id=target_user_id, question="VALIDATION_FAIL")
+        placeholder = UserAskRequest.model_construct(
+            target_user_id=target_user_id,
+            question="VALIDATION_FAIL"
+        )
         res_status = "error"
         reason = f"Validation failed: {str(e)}"
         audit_id = write_audit_log(placeholder, {"status": res_status, "reason": reason}, event_type="ask_creation")
@@ -104,7 +114,9 @@ async def msteams_ask_user(
         question=req.question,
         correlation_id=req.correlation_id,
         metadata=req.metadata,
-        expires_in_seconds=req.expires_in_seconds
+        expires_in_seconds=req.expires_in_seconds,
+        tool_name=tool_name,
+        requester_agent_id=requester_agent_id
     )
     audit_id = write_audit_log(ask, {"status": "success", "reason": "Ask created"}, event_type="ask_creation")
     return {
@@ -117,23 +129,66 @@ async def msteams_ask_user(
         "audit_id": audit_id
     }
 
-async def msteams_get_user_reply(request_id: str) -> Dict[str, Any]:
-    '''Check the state of a requested user reply.'''
+async def msteams_get_user_reply(
+    request_id: str,
+    target_user_id: str,
+    tool_name: str,
+    requester_agent_id: str
+) -> Dict[str, Any]:
+    """
+    Check the state of a requested user reply with strict authorization.
+
+    The request_id is bound to target_user_id, tool_name, and requester_agent_id.
+    Unauthorized callers will receive NOT_FOUND status (security by obscurity).
+    """
     try:
-        req = UserReplyRequest(request_id=request_id)
+        req = UserReplyRequest(
+            request_id=request_id,
+            target_user_id=target_user_id,
+            tool_name=tool_name,
+            requester_agent_id=requester_agent_id
+        )
     except Exception as e:
         # Now audited!
-        placeholder = UserReplyRequest.model_construct(request_id=request_id)
+        placeholder = UserReplyRequest.model_construct(
+            request_id=request_id,
+            target_user_id=target_user_id,
+            tool_name=tool_name,
+            requester_agent_id=requester_agent_id
+        )
         res_status = "error"
         reason = f"Validation failed: {str(e)}"
         audit_id = write_audit_log(placeholder, {"status": res_status, "reason": reason}, event_type="reply_lookup")
         return {"status": "error", "reason": reason, "audit_id": audit_id}
 
-    state, reply_text = await ask_service.get_reply_status(req.request_id)
-    
-    # Audit the lookup result
-    audit_id = write_audit_log(req, {"status": state, "reason": f"Reply check: {state}"}, event_type="reply_lookup")
-    
+    state, reply_text = await ask_service.get_reply_status(
+        req.request_id,
+        req.target_user_id,
+        req.tool_name,
+        req.requester_agent_id
+    )
+
+    if state == AskState.NOT_FOUND:
+        return {
+            "status": "error",
+            "reason": "Request not found or access denied",
+            "request_id": request_id,
+            "state": state,
+            "audit_id": write_audit_log(
+                {"request_id": req.request_id, "target_user": req.target_user_id},
+                {"status": "denied", "reason": "NOT_FOUND"},
+                event_type="reply_lookup_denied"
+            )
+        }
+
+    # SECURITY: Log state transitions without logging message bodies
+    event_type = "reply_lookup_success" if state == AskState.ANSWERED else "reply_lookup_other"
+    audit_id = write_audit_log(
+        {"request_id": req.request_id, "state": state, "target_user": req.target_user_id},
+        {"status": "success", "state": state},
+        event_type=event_type
+    )
+
     return {
         "status": "success",
         "request_id": request_id,
@@ -233,13 +288,39 @@ def _register_tools(mcp: _FastMCP) -> None:
     async def _notify(target_type: str, target_id: str, title: str, message: str, severity: str, correlation_id: str = None, metadata: dict = None) -> Dict[str, Any]:
         return await msteams_send_notification(target_type, target_id, title, message, severity, correlation_id, metadata)
 
-    @mcp.tool(name="msteams_ask_user", description="Ask a controlled question to an allowlisted Teams user")
-    async def _ask(target_user_id: str, question: str, correlation_id: str = None, metadata: dict = None, expires_in_seconds: int = 3600) -> Dict[str, Any]:
-        return await msteams_ask_user(target_user_id, question, correlation_id, metadata, expires_in_seconds)
+    @mcp.tool(
+        name="msteams_ask_user",
+        description="Ask a controlled question to an allowlisted Teams user. Returns a request_id bound to target_user_id, tool_name, and requester_agent_id for security."
+    )
+    async def _ask(
+        target_user_id: str,
+        question: str,
+        correlation_id: str | None = None,
+        metadata: dict | None = None,
+        expires_in_seconds: int = 3600,
+        tool_name: str = "msteams_ask_user",
+        requester_agent_id: str = "unknown"
+    ) -> Dict[str, Any]:
+        return await msteams_ask_user(
+            target_user_id, question, correlation_id, metadata, expires_in_seconds, tool_name, requester_agent_id
+        )
 
-    @mcp.tool(name="msteams_get_user_reply", description="Check the state of a requested user reply")
-    async def _get_reply(request_id: str) -> Dict[str, Any]:
-        return await msteams_get_user_reply(request_id)
+    @mcp.tool(
+        name="msteams_get_user_reply",
+        description="Check the state of a requested user reply. Requires authorization (target_user_id, tool_name, requester_agent_id)"
+    )
+    async def _get_reply(
+        request_id: str,
+        target_user_id: str,
+        tool_name: str,
+        requester_agent_id: str
+    ) -> Dict[str, Any]:
+        return await msteams_get_user_reply(
+            request_id,
+            target_user_id,
+            tool_name,
+            requester_agent_id
+        )
 
     @mcp.tool(name="msteams_request_approval", description="Request human approval for an action via an allowlisted Teams user")
     async def _request_approval(target_user_id: str, title: str, description: str, risk_level: str = None, action_fingerprint: str = None, correlation_id: str = None, metadata: dict = None, expires_in_seconds: int = 3600) -> Dict[str, Any]:
