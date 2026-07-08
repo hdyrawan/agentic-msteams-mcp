@@ -2,7 +2,6 @@ Metadata-Version: 2.4
 Name: agentic-msteams-mcp
 Version: 0.4.0
 Summary: Agentic Microsoft Teams MCP Server for AI Agent Gateway
-Author-email: Hartdy Vistahart <harddy.vista@gmail.com>
 License: MIT
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
