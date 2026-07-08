@@ -17,9 +17,25 @@ async def handle_teams_message(request: Request) -> Dict[str, Any]:
         if "reply_to" in body:
             request_id = body["reply_to"]
             reply_text = body.get("text", "")
-            ask = await ask_service.set_reply(request_id, reply_text) # Note: Typo here fixed in next turn if needed
+            target_user_id = body.get("target_user_id")
+            tool_name = body.get("tool_name")
+            requester_agent_id = body.get("requester_agent_id")
+
+            if not all([target_user_id, tool_name, requester_agent_id]):
+                return {
+                    "status": "error", 
+                    "reason": "Missing security parameters: target_user_id, tool_name, or requester_agent_id are required for replies"
+                }
+
+            ask = await ask_service.set_reply(
+                request_id=request_id, 
+                text=reply_text, 
+                target_user_id=target_user_id, 
+                tool_name=tool_name, 
+                requester_agent_id=requester_agent_id
+            )
             if not ask:
-                return {"status": "error", "reason": "Invalid request_id"}
+                return {"status": "error", "reason": "Invalid request_id or authorization failure"}
             return {"status": "received", "request_id": request_id}
         
         return {

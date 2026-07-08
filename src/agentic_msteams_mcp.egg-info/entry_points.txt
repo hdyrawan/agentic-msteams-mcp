@@ -1,2 +1,0 @@
-[console_scripts]
-agentic-msteams-mcp = agentic_msteams_mcp.main:main

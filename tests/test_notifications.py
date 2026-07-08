@@ -1,9 +1,14 @@
 import pytest
 import asyncio
+from fastapi.testclient import TestClient
+
 from agentic_msteams_mcp.mcp_server import msteams_send_notification, msteams_ask_user, msteams_get_user_reply, mcp_server
 from agentic_msteams_mcp.notifications.models import TargetType, Severity
 from agentic_msteams_mcp.config import settings
 from agentic_msteams_mcp.asks.store import store
+from agentic_msteams_mcp.teams_app import teams_app
+
+client = TestClient(teams_app)
 
 def run_async(coro):
     return asyncio.run(coro)
@@ -91,11 +96,6 @@ def test_ask_expired():
     from agentic_msteams_mcp.asks.store import store as s
     user_ask = s._asks[rid]
     import datetime
-    # We must ensure the binding is still valid but the time has passed
-    # Since request_id depends on expires_at, we can't just change expires_at 
-    # without breaking the bound ID unless we mock verify_request_id or use a different approach.
-    # For now, let's simulate expiration by manually setting state in store if needed, 
-    # but better to test the service logic.
     user_ask.expires_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1)
     
     # Since we changed expires_at, verify_request_id (which uses expires_at) will now fail 
@@ -103,7 +103,6 @@ def test_ask_expired():
     # To test actual expiration logic, the request_id must be bound to the original expiry.
     
     reply_res = run_async(msteams_get_user_reply(rid, "test-user", "msteams_ask_user", "unknown"))
-    # In current implementation, a mismatch in target/tool/agent/expiry results in NOT_FOUND.
     assert reply_res["state"] == "not_found"
 
 def test_audit_no_bodies():
@@ -115,3 +114,59 @@ def test_audit_no_bodies():
     with open(settings.msteams_audit_log_path, "r") as f:
         logs = f.read()
         assert "Secret Question?" not in logs
+
+def test_teams_app_reply_success():
+    # 1. Create an ask
+    ask_res = run_async(msteams_ask_user("test-user", "Hello?"))
+    rid = ask_res["request_id"]
+    
+    # 2. Send valid reply payload to teams_app
+    payload = {
+        "reply_to": rid,
+        "text": "I am here!",
+        "target_user_id": "test-user",
+        "tool_name": "msteams_ask_user",
+        "requester_agent_id": "unknown"
+    }
+    res = client.post("/api/messages", json=payload)
+    assert res.status_code == 200
+    assert res.json() == {"status": "received", "request_id": rid}
+    
+    # 3. Verify state in store
+    reply_res = run_async(msteams_get_user_reply(rid, "test-user", "msteams_ask_user", "unknown"))
+    assert reply_res["state"] == "answered"
+    assert reply_res["reply"] == "I am here!"
+
+def test_teams_app_reply_missing_params():
+    # Test missing target_user_id
+    ask_res = run_async(msteams_ask_user("test-user", "Hello?"))
+    rid = ask_res["request_id"]
+    
+    payloads = [
+        {"reply_to": rid, "text": "hi", "tool_name": "t", "requester_agent_id": "a"}, # missing target
+        {"reply_to": rid, "text": "hi", "target_user_id": "u", "requester_agent_id": "a"}, # missing tool
+        {"reply_to": rid, "text": "hi", "target_user_id": "u", "tool_name": "t"}, # missing agent
+    ]
+    
+    for p in payloads:
+        res = client.post("/api/messages", json=p)
+        assert res.status_code == 200
+        assert res.json()["status"] == "error"
+        assert "Missing security parameters" in res.json()["reason"]
+
+def test_teams_app_reply_wrong_auth():
+    # Test wrong binding parameters
+    ask_res = run_async(msteams_ask_user("test-user", "Hello?"))
+    rid = ask_res["request_id"]
+    
+    payload = {
+        "reply_to": rid,
+        "text": "hi",
+        "target_user_id": "wrong-user",
+        "tool_name": "msteams_ask_user",
+        "requester_agent_id": "unknown"
+    }
+    res = client.post("/api/messages", json=payload)
+    assert res.status_code == 200
+    assert res.json()["status"] == "error"
+    assert "Invalid request_id or authorization failure" in res.json()["reason"]
