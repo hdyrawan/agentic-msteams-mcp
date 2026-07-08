@@ -8,15 +8,14 @@ def run_async(coro):
     return asyncio.run(coro)
 
 @pytest.fixture(autouse=True)
-def setup_config(tmp_path):
+def setup_test_state(tmp_path):
+    from agentic_msteams_mcp.approvals.store import store as approval_store
     settings.msteams_allowed_user_ids = ["test-user"]
     settings.msteams_notification_dry_run = True
     settings.msteams_audit_log_path = str(tmp_path / "approvals_audit.log")
-
-@pytest.fixture(autouse=True)
-def clear_approval_store():
-    from agentic_msteams_mcp.approvals.store import store as app_store
-    app_store._approvals = {}
+    approval_store._approvals = {}
+    (tmp_path / "approvals_audit.log").write_text("")
+    yield
 
 def test_request_approval_allowed():
     res = run_async(msteams_request_approval("test-user", "Title", "Description"))
