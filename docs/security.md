@@ -32,7 +32,9 @@ Every interaction attempt is recorded in an append-only audit log (`MSTEAMS_AUDI
 ### 4. State Persistence and Privacy
 To ensure system reliability across restarts, optional durable state configuration is provided (`msteams_use_durable_state`).
 - **Default**: Durable state is disabled by default (in-memory storage).
-- **Privacy Boundary**: Audit logs remain separate from the state store. Sensitive message bodies, questions, and approval descriptions must not be persisted unless explicitly designed and reviewed for compliance in a later version.
+- **Implementation**: v0.5.0b implements durable persistence for *asks* only via an atomic JSON store. Approval state remains in-memory until future milestones.
+- **Privacy Boundary**: Audit logs remain separate from the state store.
+- **Known Privacy Limitation**: For functional compatibility (recovery across restarts), `UserAsk` objects containing the original question text and target user IDs are persisted to disk when durable state is enabled. This should be weighed against local data retention policies.
 
 ### 5. Dry-Run Default
 The server defaults to `MSTEAMS_NOTIFICATION_DRY_RUN=True`. This ensures that fresh deployments do not accidentally trigger notifications until explicitly configured for production delivery.

@@ -58,9 +58,9 @@ The implementation follows security best practices:
 
 ## Future Development Plans
 
-1. Implement actual Microsoft Teams SDK integration and Graph API delivery (Current versions utilize Dry-Run as the safe default).
-2. Expand allowlist capabilities to support group-based permissions.
-3. Integrate with enterprise identity providers for dynamic user discovery.
-4. Optional Durable State: Add configuration flags (`msteams_use_durable_state`) to enable persisting pending asks and approvals across restarts. Default remains in-memory.
+61. Implement actual Microsoft Teams SDK integration and Graph API delivery (Current versions utilize Dry-Run as the safe default).
+62. Expand allowlist capabilities to support group-based permissions.
+63. Integrate with enterprise identity providers for dynamic user discovery.
+64. Optional Durable State: Implemented configuration flags (`msteams_use_durable_state`) to enable persisting pending asks across restarts via JSON. Default remains in-memory. Approval state persists in-memory until v0.6.0.
 
 The current v0.5.0a implementation provides the full set of MCP tools for notifications, asks, and approvals, while maintaining a secure dry-run delivery model by default to prevent accidental production triggers.
