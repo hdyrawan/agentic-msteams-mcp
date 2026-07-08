@@ -26,11 +26,16 @@ def clear_store():
 def test_mcp_inventory():
     tools = mcp_server._tool_manager.list_tools()
     names = [t.name for t in tools]
+    expected_names = {
+        "msteams_health_check",
+        "msteams_send_notification",
+        "msteams_ask_user",
+        "msteams_get_user_reply",
+        "msteams_request_approval",
+        "msteams_get_approval",
+    }
+    assert set(names) == expected_names
     assert len(names) == 6
-    assert "msteams_health_check" in names
-    assert "msteams_send_notification" in names
-    assert "msteams_ask_user" in names
-    assert "msteams_get_user_reply" in names
 
 def test_notification_allowed():
     res = run_async(msteams_send_notification("user", "test-user", "Hi", "Msg", "info"))
@@ -98,10 +103,6 @@ def test_ask_expired():
     import datetime
     user_ask.expires_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1)
     
-    # Since we changed expires_at, verify_request_id (which uses expires_at) will now fail 
-    # and return NOT_FOUND instead of EXPIRED.
-    # To test actual expiration logic, the request_id must be bound to the original expiry.
-    
     reply_res = run_async(msteams_get_user_reply(rid, "test-user", "msteams_ask_user", "unknown"))
     assert reply_res["state"] == "not_found"
 
@@ -120,7 +121,7 @@ def test_teams_app_reply_success():
     ask_res = run_async(msteams_ask_user("test-user", "Hello?"))
     rid = ask_res["request_id"]
     
-    # 2. Send valid reply payload to teams_app
+    # 2. Send valid reply payload to teams_app with secret
     payload = {
         "reply_to": rid,
         "text": "I am here!",
@@ -128,7 +129,11 @@ def test_teams_app_reply_success():
         "tool_name": "msteams_ask_user",
         "requester_agent_id": "unknown"
     }
-    res = client.post("/api/messages", json=payload)
+    res = client.post(
+        "/api/messages", 
+        headers={"X-MSTEAMS-MCP-SECRET": settings.msteams_inbound_shared_secret}, 
+        json=payload
+    )
     assert res.status_code == 200
     assert res.json() == {"status": "received", "request_id": rid}
     
@@ -149,7 +154,11 @@ def test_teams_app_reply_missing_params():
     ]
     
     for p in payloads:
-        res = client.post("/api/messages", json=p)
+        res = client.post(
+            "/api/messages", 
+            headers={"X-MSTEAMS-MCP-SECRET": settings.msteams_inbound_shared_secret}, 
+            json=p
+        )
         assert res.status_code == 200
         assert res.json()["status"] == "error"
         assert "Missing security parameters" in res.json()["reason"]
@@ -166,7 +175,11 @@ def test_teams_app_reply_wrong_auth():
         "tool_name": "msteams_ask_user",
         "requester_agent_id": "unknown"
     }
-    res = client.post("/api/messages", json=payload)
+    res = client.post(
+        "/api/messages", 
+        headers={"X-MSTEAMS-MCP-SECRET": settings.msteams_inbound_shared_secret}, 
+        json=payload
+    )
     assert res.status_code == 200
     assert res.json()["status"] == "error"
     assert "Invalid request_id or authorization failure" in res.json()["reason"]

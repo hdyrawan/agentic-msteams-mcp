@@ -39,7 +39,7 @@ The server defaults to `MSTEAMS_NOTIFICATION_DRY_RUN=True`. This ensures that fr
 | **Unauthorized Target** | Fail-closed allowlist blocks delivery to unknown users. |
 | **Sensitive Data Leak in Logs** | Body-stripping fingerprinting ensures payload privacy in audit logs. |
 | **Agent Hallucination (Tool Use)** | Closed toolset prevents agents from attempting arbitrary Graph API calls. |
-| **Unauthenticated Webhook Injection** | The HTTP surface is intended to be hosted behind a proxy that validates Teams signatures (future hardening). |
+| **Unauthenticated Webhook Injection** | Inbound callback authentication using a shared secret (X-MSTEAMS-MCP-SECRET) ensures that only authorized endpoints can trigger reply processing. This is enforced in a fail-closed manner. |
 
 ## Constraints
 - No tenant user search tools are provided.
