@@ -14,10 +14,12 @@ def run_async(coro):
     return asyncio.run(coro)
 
 @pytest.fixture(autouse=True)
-def setup_config():
+def setup_config(tmp_path):
     settings.msteams_allowed_user_ids = ["test-user"]
     settings.msteams_allowed_channel_ids = ["test-chan"]
     settings.msteams_notification_dry_run = True
+    settings.msteams_audit_log_path = str(tmp_path / "notifications_audit.log")
+    settings.msteams_inbound_shared_secret = "test-secure-secret"
 
 @pytest.fixture(autouse=True)
 def clear_store():
